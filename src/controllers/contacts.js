@@ -1,4 +1,4 @@
-import { getAllContacts, getContactById, createContact } from "../services/contacts";
+import { getAllContacts, getContactById, createContact, deleteContact, updateContact } from "../services/contacts";
 import createHttpError from 'http-errors';
 
 export const getContactsController = async (req, res, next) => {
@@ -30,5 +30,34 @@ export const createContactController = async (req, res) => {
         status: 201,
         message: 'Successfully created a contact!',
         data: newContact,
+    });
+};
+
+export const deleteContactController = async (req, res, next) => {
+    const { contactId } = req.params;
+
+    const contact = await deleteContact(contactId);
+
+    if (!contact) {
+        next(createHttpError(404, 'Contact not found'));
+        return;
+    }
+
+    res.status(204).send();
+};
+
+export const patchContactController = async (req, res, next) => {
+    const { contactId } = req.params;
+    const updatedContact = await updateContact(contactId, req.body);
+
+    if (!updatedContact) {
+        next(createHttpError(404, 'Contact not found'));
+        return;
+    }
+
+    res.status(200).json({
+        status: 200,
+        message: 'Successfully patched a contact!',
+        data: updatedContact,
     });
 };
