@@ -1,15 +1,28 @@
-import { UsersCollection } from '../db/models/user.js';
-import { SessionsCollection } from '../db/models/session.js';
-import { randomBytes } from 'crypto';
+import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import createHttpError from 'http-errors';
-import { FIFTEEN_MINUTES, ONE_DAY, SMTP, TEMPLATES_DIR } from '../constants/index.js';
 import jwt from 'jsonwebtoken';
-import { getEnvVar } from '../utils/getEnvVar.js';
-import { sendEmail } from '../utils/sendMail.js';
 import handlebars from 'handlebars';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { FIFTEEN_MINUTES, ONE_DAY, SMTP, TEMPLATES_DIR } from '../constants/index.js';
+import { getEnvVar } from '../utils/getEnvVar.js';
+import { sendEmail } from '../utils/sendMail.js';
+import { UsersCollection } from '../db/models/user.js';
+import { SessionsCollection } from '../db/models/session.js';
+
+const createSession = async (userId) => {
+    const accessToken = crypto.randomBytes(30).toString('base64');
+    const refreshToken = crypto.randomBytes(30).toString('base64');
+
+    return SessionsCollection.create({
+        userId,
+        accessToken,
+        refreshToken,
+        accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
+        refreshTokenValidUntil: new Date(Date.now() + ONE_DAY),
+    });
+};
 
 export const registerUser = async (payload) => {
     const user = await UsersCollection.findOne({ email: payload.email });
@@ -34,34 +47,11 @@ export const loginUser = async (payload) => {
         throw createHttpError(401, 'Unauthorized');
     }
 
-    await SessionsCollection.deleteOne({ userId: user._id });
-
-    const accessToken = randomBytes(30).toString('base64');
-    const refreshToken = randomBytes(30).toString('base64');
-
-    return await SessionsCollection.create({
-        userId: user._id,
-        accessToken,
-        refreshToken,
-        accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
-        refreshTokenValidUntil: new Date(Date.now() + ONE_DAY),
-    });
+    return user;
 };
 
 export const logoutUser = async (sessionId) => {
     await SessionsCollection.deleteOne({ _id: sessionId });
-};
-
-const createSession = () => {
-    const accessToken = randomBytes(30).toString('base64');
-    const refreshToken = randomBytes(30).toString('base64');
-
-    return {
-        accessToken,
-        refreshToken,
-        accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
-        refreshTokenValidUntil: new Date(Date.now() + ONE_DAY),
-    };
 };
 
 export const refreshUsersSession = async ({ sessionId, refreshToken }) => {
@@ -81,14 +71,10 @@ export const refreshUsersSession = async ({ sessionId, refreshToken }) => {
         throw createHttpError(401, 'Session token expired');
     }
 
-    const newSession = createSession();
-
     await SessionsCollection.deleteOne({ _id: sessionId, refreshToken });
+    const newSession = await createSession();
 
-    return await SessionsCollection.create({
-        userId: session.userId,
-        ...newSession,
-    });
+    return newSession;
 };
 
 export const requestResetToken = async (email) => {
