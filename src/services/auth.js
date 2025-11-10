@@ -11,7 +11,7 @@ import { sendEmail } from '../utils/sendMail.js';
 import { UsersCollection } from '../db/models/user.js';
 import { SessionsCollection } from '../db/models/session.js';
 
-const createSession = async (userId) => {
+export const createSession = async (userId) => {
     const accessToken = crypto.randomBytes(30).toString('base64');
     const refreshToken = crypto.randomBytes(30).toString('base64');
 
@@ -38,19 +38,17 @@ export const registerUser = async (payload) => {
 
 export const loginUser = async (payload) => {
     const user = await UsersCollection.findOne({ email: payload.email });
-    if (!user) {
-        throw createHttpError(401, 'User not found');
-    }
+    if (!user) throw createHttpError(401, 'User not found');
+
     const isEqual = await bcrypt.compare(payload.password, user.password);
 
-    if (!isEqual) {
-        throw createHttpError(401, 'Unauthorized');
-    }
+    if (!isEqual) throw createHttpError(401, 'Unauthorized');
 
     return user;
 };
 
 export const logoutUser = async (sessionId) => {
+    if (!sessionId) return;
     await SessionsCollection.deleteOne({ _id: sessionId });
 };
 
@@ -60,28 +58,23 @@ export const refreshUsersSession = async ({ sessionId, refreshToken }) => {
         refreshToken,
     });
 
-    if (!session) {
-        throw createHttpError(401, 'Session not found');
-    }
+    if (!session) throw createHttpError(401, 'Session not found');
 
     const isSessionTokenExpired =
         new Date() > new Date(session.refreshTokenValidUntil);
 
-    if (isSessionTokenExpired) {
-        throw createHttpError(401, 'Session token expired');
-    }
+    if (isSessionTokenExpired) throw createHttpError(401, 'Session token expired');
 
-    await SessionsCollection.deleteOne({ _id: sessionId, refreshToken });
-    const newSession = await createSession();
+    await SessionsCollection.deleteOne({ _id: sessionId });
+    const newSession = await createSession(session.userId);
 
     return newSession;
 };
 
 export const requestResetToken = async (email) => {
     const user = await UsersCollection.findOne({ email });
-    if (!user) {
-        throw createHttpError(404, 'User not found');
-    }
+    if (!user) throw createHttpError(404, 'User not found');
+
     const resetToken = jwt.sign(
         {
             sub: user._id,
